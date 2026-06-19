@@ -79,7 +79,7 @@ public class AutoDrivingBLUE_Long extends LinearOpMode {
 
         Actions.runBlocking(
                 new SequentialAction(
-                        // 1. 이동: (61, 10, 200도) 위치로 이동 후 90도 회전
+                            // 1. 이동: (61, 10, 200도) 위치로 이동 후 90도 회전
                         drive.getRoadRunnerDrive().actionBuilder(beginPose)
 //                                .splineTo(new Vector2d(61, 10), Math.toRadians(200))
 //                                .turnTo(200)

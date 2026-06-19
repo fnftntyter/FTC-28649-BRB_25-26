@@ -53,14 +53,14 @@ public class MecanumBase {
             if (camera.isTagVisible(20)) {
 
             AprilTagDetection detection = camera.getDetectionById(20);
-            targetHeading = currentHeading - camera.getDetectionById(20).ftcPose.bearing + camera.BEARING_OFFSET;;
+            targetHeading = currentHeading + camera.getDetectionById(20).ftcPose.bearing + camera.BEARING_OFFSET;;
 
 //                turnToAprilTag(camera.getDetectionById(20));
             }
             // 카메라가 태그 24를 인식 중일 때만 방향 갱신
             else if (camera.isTagVisible(24)) {
             AprilTagDetection detection = camera.getDetectionById(24);
-            targetHeading = currentHeading - camera.getDetectionById(24).ftcPose.bearing + camera.BEARING_OFFSET;;
+            targetHeading = currentHeading + camera.getDetectionById(24).ftcPose.bearing + camera.BEARING_OFFSET;;
 
 //                turnToAprilTag(camera.getDetectionById(24));
             }

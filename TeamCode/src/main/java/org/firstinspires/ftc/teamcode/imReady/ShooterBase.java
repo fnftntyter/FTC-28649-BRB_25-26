@@ -13,7 +13,7 @@ import org.firstinspires.ftc.vision.apriltag.AprilTagDetection;
 public class ShooterBase extends ShooterHardware {
     public static PIDFCoefficients SHOOTER_PID = new PIDFCoefficients(35, 0, 10, 13);
     public static double TPS = 1000;
-    public static double DEFAULT_TPS = 980;
+    public static double DEFAULT_TPS = 910;
     public static double SERVO_MAX = 0.8;
     public static double SERVO_MIN = 0;
     public static double SERVO_WAIT_TIME = 1100; // ms
@@ -23,13 +23,16 @@ public class ShooterBase extends ShooterHardware {
 
     // 물리적 제원 (보정)
     public static double FLYWHEEL_RADIUS = 1.889765; // 바퀴 반지름
+    //  33,35 수정후 실시간 조정
     public static double SHOOTER_EFFICENCY = 0.58; // 효율계수 (0.0 ~ 1.0) 1은 슬립 X // 튜닝 할 것
     public static double TICK_PER_REV = 28; // 모터 해상도 PPR
     public static double GEAR_RATIO = 1; // 기어비
 
     // 포물선 운동 상수
     private double x = 0; // 수평 거리 (in)
+    //  델타 h 측정 후 수정
     private final double delta_h = 30.098425; // 수직 높이 차이 (in)
+    // 발사각도 측정 후 수정
     private final double theta = 0.872665; // 기본 발사 각도 (rad)
     private final double g = 386.1; // 중력 가속도 (in/s^2)
 
