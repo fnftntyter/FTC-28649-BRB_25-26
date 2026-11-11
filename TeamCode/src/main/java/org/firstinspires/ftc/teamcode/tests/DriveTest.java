@@ -10,7 +10,7 @@ import org.firstinspires.ftc.teamcode.roadRunner.MecanumDrive;
 @TeleOp(name = "DriveTest", group = "Test")
 public class DriveTest extends LinearOpMode {
 
-    // P제어 게인 (FTC Dashboard에서 조정 가능하도록 static으로 선언)
+    // CP제어 게인 (FT Dashboard에서 조정 가능하도록 static으로 선언)
     public static double HEADING_P_GAIN = 2.0;
 
     // 목표 방향 (라디안)

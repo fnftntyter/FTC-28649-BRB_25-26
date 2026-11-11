@@ -6,11 +6,21 @@ import com.qualcomm.robotcore.hardware.HardwareMap;
 
 import org.firstinspires.ftc.robotcore.external.navigation.Position;
 import org.firstinspires.ftc.vision.apriltag.AprilTagDetection;
+import org.firstinspires.ftc.vision.apriltag.AprilTagSingleDetection;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+/**
+ * AprilTag 조회/조준 계산.
+ * <p>
+ * <b>SDK 12.0 주의.</b> {@code AprilTagDetection}이 추상 클래스가 되고
+ * {@code AprilTagSingleDetection}(태그 1개)과 {@code AprilTagClusterDetection}(BIOBUZZ의
+ * 태그 묶음)으로 갈라졌다. {@code id}/{@code metadata}/{@code center}는 Single에만 있고,
+ * {@code ftcPose}/{@code robotPose}는 공통이다.
+ * 이 클래스는 ID로 찾는 메소드들이 Single만 보도록 걸러낸다.
+ */
 @Config
 public class CameraBase extends CameraHardware {
 
@@ -73,11 +83,12 @@ public class CameraBase extends CameraHardware {
     //  태그 조회
     // ────────────────────────────────────────────────
 
-    /** 해당 ID의 태그. 안 보이면 null. */
-    public AprilTagDetection getDetectionById(int id) {
+    /** 해당 ID의 태그. 안 보이면 null. 클러스터 검출은 ID가 없으므로 건너뛴다. */
+    public AprilTagSingleDetection getDetectionById(int id) {
         for (AprilTagDetection detection : currentDetections) {
-            if (detection.id == id) {
-                return detection;
+            if (detection instanceof AprilTagSingleDetection
+                    && ((AprilTagSingleDetection) detection).id == id) {
+                return (AprilTagSingleDetection) detection;
             }
         }
         return null;
@@ -88,10 +99,10 @@ public class CameraBase extends CameraHardware {
     }
 
     /** 후보 ID 중 가장 가까운(= 가장 신뢰할 만한) 태그. 하나도 안 보이면 null. */
-    public AprilTagDetection getNearestOf(int... ids) {
-        AprilTagDetection best = null;
+    public AprilTagSingleDetection getNearestOf(int... ids) {
+        AprilTagSingleDetection best = null;
         for (int id : ids) {
-            AprilTagDetection d = getDetectionById(id);
+            AprilTagSingleDetection d = getDetectionById(id);
             if (d == null || d.ftcPose == null) continue;
             if (best == null || d.ftcPose.range < best.ftcPose.range) {
                 best = d;
@@ -106,15 +117,17 @@ public class CameraBase extends CameraHardware {
      * 하나도 없으면 -1을 반환한다.
      */
     public int getMotifTagId() {
-        AprilTagDetection d = getNearestOf(GameConfig.TAG_MOTIF_CANDIDATES);
+        AprilTagSingleDetection d = getNearestOf(GameConfig.TAG_MOTIF_CANDIDATES);
         return (d != null) ? d.id : -1;
     }
 
-    /** 지금 보이는 모든 태그 ID (텔레메트리용) */
+    /** 지금 보이는 모든 태그 ID (텔레메트리용). 클러스터는 ID가 없어 제외된다. */
     public List<Integer> getVisibleTagIds() {
         List<Integer> ids = new ArrayList<>();
         for (AprilTagDetection detection : currentDetections) {
-            ids.add(detection.id);
+            if (detection instanceof AprilTagSingleDetection) {
+                ids.add(((AprilTagSingleDetection) detection).id);
+            }
         }
         return ids;
     }

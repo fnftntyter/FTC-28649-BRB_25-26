@@ -6,8 +6,10 @@ import com.qualcomm.robotcore.eventloop.opmode.*;
 
 import org.firstinspires.ftc.robotcore.external.hardware.camera.WebcamName;
 import org.firstinspires.ftc.vision.VisionPortal;
+import org.firstinspires.ftc.vision.apriltag.AprilTagClusterDetection;
 import org.firstinspires.ftc.vision.apriltag.AprilTagDetection;
 import org.firstinspires.ftc.vision.apriltag.AprilTagProcessor;
+import org.firstinspires.ftc.vision.apriltag.AprilTagSingleDetection;
 import org.openftc.easyopencv.OpenCvCameraFactory;
 import org.openftc.easyopencv.OpenCvWebcam;
 
@@ -95,17 +97,31 @@ public class CamTest extends OpMode {
         packet.put("# AprilTags Detected", currentDetections.size());
 
         // Step through the list of detections and display info for each one.
+        //
+        // SDK 12.0부터 AprilTagDetection은 추상 클래스다. id / metadata / center는
+        // 태그 하나를 잡은 AprilTagSingleDetection에만 있고, BIOBUZZ의 태그 묶음을
+        // 잡으면 AprilTagClusterDetection이 온다. ftcPose는 둘 다 가지고 있다.
         for (AprilTagDetection detection : currentDetections) {
-            if (detection.metadata != null) {
-                packet.put("ID", detection.id);
-                packet.put("Name", detection.metadata.name);
+            if (detection instanceof AprilTagSingleDetection) {
+                AprilTagSingleDetection single = (AprilTagSingleDetection) detection;
+                packet.put("ID", single.id);
+
+                if (single.metadata != null) {
+                    packet.put("Name", single.metadata.name);
+                    packet.put("X Y Z (inch)", String.format("%6.1f %6.1f %6.1f", detection.ftcPose.x, detection.ftcPose.y, detection.ftcPose.z));
+                    packet.put("Pitch Roll Yaw (deg)", String.format("%6.1f %6.1f %6.1f", detection.ftcPose.pitch, detection.ftcPose.roll, detection.ftcPose.yaw));
+                    packet.put("Range Bearing Elevation (inch, deg, deg)", String.format("%6.1f %6.1f %6.1f", detection.ftcPose.range, detection.ftcPose.bearing, detection.ftcPose.elevation));
+                } else {
+                    packet.put("Name", "Unknown");
+                    packet.put("Center (pixels)", String.format("%6.0f %6.0f", single.center.x, single.center.y));
+                }
+            } else if (detection instanceof AprilTagClusterDetection) {
+                AprilTagClusterDetection cluster = (AprilTagClusterDetection) detection;
+                packet.put("ID", "cluster");
+                packet.put("Name", cluster.metadata != null ? cluster.metadata.name : "Unknown cluster");
+                packet.put("Cluster found (%)", cluster.percentClusterFound);
                 packet.put("X Y Z (inch)", String.format("%6.1f %6.1f %6.1f", detection.ftcPose.x, detection.ftcPose.y, detection.ftcPose.z));
-                packet.put("Pitch Roll Yaw (deg)", String.format("%6.1f %6.1f %6.1f", detection.ftcPose.pitch, detection.ftcPose.roll, detection.ftcPose.yaw));
                 packet.put("Range Bearing Elevation (inch, deg, deg)", String.format("%6.1f %6.1f %6.1f", detection.ftcPose.range, detection.ftcPose.bearing, detection.ftcPose.elevation));
-            } else {
-                packet.put("ID", detection.id);
-                packet.put("Name", "Unknown");
-                packet.put("Center (pixels)", String.format("%6.0f %6.0f", detection.center.x, detection.center.y));
             }
         }   // end for() loop
         dashboard.sendTelemetryPacket(packet);
