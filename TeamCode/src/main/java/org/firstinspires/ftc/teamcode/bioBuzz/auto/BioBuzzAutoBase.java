@@ -111,6 +111,7 @@ public abstract class BioBuzzAutoBase extends OpMode {
 
     private StartSpot startSpot = StartSpot.FAR;
     private Step step = Step.DRIVE_TO_LAUNCH;
+    private String autoAbortReason = "";
 
     /** AUTO 시작부터 흐른 시간 */
     private final ElapsedTime autoTimer = new ElapsedTime();
@@ -172,11 +173,13 @@ public abstract class BioBuzzAutoBase extends OpMode {
 
         switch (step) {
             case DRIVE_TO_LAUNCH:
-                if (pathFinished()) {
+                if (!follower.isBusy()) {
                     follower.hold(launchPose());   // 발사하는 동안 밀려도 제자리 유지
                     stepTimer.reset();
                     startLaunch();
                     step = Step.LAUNCHING;
+                } else if (pathTimedOut()) {
+                    abortAuto("발사 위치 이동 시간 초과");
                 }
                 break;
 
@@ -190,9 +193,11 @@ public abstract class BioBuzzAutoBase extends OpMode {
                 break;
 
             case DRIVE_TO_PARK:
-                if (pathFinished()) {
+                if (!follower.isBusy()) {
                     follower.hold(parkPose());
                     step = Step.DONE;
+                } else if (pathTimedOut()) {
+                    abortAuto("파킹 위치 이동 시간 초과");
                 }
                 break;
 
@@ -229,9 +234,17 @@ public abstract class BioBuzzAutoBase extends OpMode {
         stepTimer.reset();
     }
 
-    /** 현재 경로가 끝났는가 (또는 너무 오래 걸려서 포기했는가) */
-    protected boolean pathFinished() {
-        return !follower.isBusy() || stepTimer.seconds() > PATH_TIMEOUT_S;
+    /** 현재 경로가 제한 시간보다 오래 걸렸는가 */
+    private boolean pathTimedOut() {
+        return stepTimer.seconds() > Math.max(0.1, PATH_TIMEOUT_S);
+    }
+
+    /** 시간 초과 시 이전 경로를 취소하고 구동 출력을 정지한다. */
+    private void abortAuto(String reason) {
+        stopLaunch();
+        follower.stop();
+        autoAbortReason = reason;
+        step = Step.DONE;
     }
 
     private Pose selectedStartPose() {
@@ -271,6 +284,8 @@ public abstract class BioBuzzAutoBase extends OpMode {
         multipleTelemetry.addData("진영 / 출발", "%s / %s", allianceName(), startSpot);
         multipleTelemetry.addData("단계", step);
         multipleTelemetry.addData("AUTO 경과 (s)", "%.1f", autoTimer.seconds());
+        multipleTelemetry.addData("자율 상태",
+                autoAbortReason.isEmpty() ? "진행/완료" : "중단: " + autoAbortReason);
         multipleTelemetry.addLine();
         multipleTelemetry.addData("위치 X / Y (in)", "%.1f / %.1f", pose.x(), pose.y());
         multipleTelemetry.addData("방향 (deg)", "%.1f", Math.toDegrees(pose.heading()));
