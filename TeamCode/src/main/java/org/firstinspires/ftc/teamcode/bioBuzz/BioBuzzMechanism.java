@@ -5,6 +5,7 @@ import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
 import com.qualcomm.robotcore.hardware.DcMotorSimple;
 import com.qualcomm.robotcore.hardware.HardwareMap;
+import com.qualcomm.robotcore.util.ElapsedTime;
 import com.qualcomm.robotcore.util.Range;
 
 /**
@@ -63,6 +64,12 @@ public class BioBuzzMechanism {
     /** 1회전 완료 판정 오차 */
     public static int PIPE_TURN_TOLERANCE = 10;
 
+    /** 엔코더가 목표에 도달하지 못할 때 계속 도는 것을 막는 안전 제한 시간 */
+    public static double PIPE_TURN_TIMEOUT_SECONDS = 3.0;
+
+    /** RUN_TO_POSITION 명령 직후 isBusy() 상태가 갱신될 때까지 기다리는 시간 */
+    private static final double PIPE_TURN_STARTUP_GRACE_SECONDS = 0.15;
+
     /**
      * 슈터 출력 (0~1).
      * 발사 거리는 이 값으로 조절한다. 멀리 보내려면 올리고, 너무 멀리 가면 내린다.
@@ -81,6 +88,8 @@ public class BioBuzzMechanism {
 
     // 파이프 360도 회전 진행 상태
     private boolean pipeOneTurnRunning = false;
+    private boolean pipeOneTurnFailed = false;
+    private final ElapsedTime pipeTurnTimer = new ElapsedTime();
 
     /** 슈터가 설정에 등록돼 있는가. false면 슈터 관련 호출이 전부 무시된다. */
     public final boolean shooterAvailable;
@@ -100,13 +109,12 @@ public class BioBuzzMechanism {
     /**
      * 방향 / 런모드 / 정지동작 초기화.
      * <p>
-     * <b>방향은 둘 다 일단 FORWARD로 두었다.</b> 어느 쪽으로 도는지 아직 모르므로,
-     * 실제로 돌려 보고 반대면 해당 줄을 {@code REVERSE}로 바꾼다.
-     * (양수 출력 = 공을 "먹는" / "올리는" 방향이 되도록 맞추는 것이 목표)
+     * 파이프와 인테이크 방향은 현재 {@code REVERSE}로 설정했다.
+     * 실제 기구에서 양수 출력이 공을 올리고 먹는 방향인지 확인해야 한다.
      * <p>
-     * 런모드는 {@code RUN_WITHOUT_ENCODER}다. 엔코더 케이블을 꽂지 않아도 돌아간다.
-     * 속도를 일정하게 유지하고 싶고 엔코더를 꽂았다면 {@code RUN_USING_ENCODER}로 바꾼다.
-     * (엔코더를 안 꽂은 상태에서 RUN_USING_ENCODER를 쓰면 모터가 제멋대로 돈다)
+     * 파이프는 엔코더를 초기화한 뒤 {@code RUN_USING_ENCODER}로 둔다.
+     * 한 바퀴 동작은 {@code RUN_TO_POSITION}을 사용하므로 엔코더 피드백이 필요하다.
+     * 인테이크는 {@code RUN_WITHOUT_ENCODER}를 사용한다.
      */
     private void initMotors() {
         pipe.setDirection(DcMotorEx.Direction.REVERSE);
@@ -117,7 +125,7 @@ public class BioBuzzMechanism {
         pipe.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
         pipe.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
 
-// 인테이크: 기존처럼 출력 제어
+        // 인테이크: 기존처럼 출력 제어
         intake.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
         intake.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
 
@@ -191,7 +199,7 @@ public class BioBuzzMechanism {
     /** 전부 정지. OpMode의 stop()에서 꼭 불러 줄 것. */
     public void stop() {
         setIntakePower(0);
-        setPipePower(0);
+        stopPipeOneTurn(false);
         shooterOff();
     }
 
@@ -203,12 +211,20 @@ public class BioBuzzMechanism {
             return;
         }
 
+        pipeOneTurnFailed = false;
+        double power = Range.clip(Math.abs(PIPE_TURN_POWER), 0.0, 1.0);
+        if (PIPE_TICKS_PER_REV <= 0 || power == 0) {
+            stopPipeOneTurn(true);
+            return;
+        }
+
         int currentPosition = pipe.getCurrentPosition();
         int targetPosition = currentPosition - (int) Math.round(PIPE_TICKS_PER_REV);
 
         pipe.setTargetPosition(targetPosition);
         pipe.setMode(DcMotor.RunMode.RUN_TO_POSITION);
-        pipe.setPower(Math.abs(PIPE_TURN_POWER));
+        pipeTurnTimer.reset();
+        pipe.setPower(power);
 
         pipeOneTurnRunning = true;
     }
@@ -221,18 +237,35 @@ public class BioBuzzMechanism {
             return;
         }
 
-        if (Math.abs(pipe.getTargetPosition() - pipe.getCurrentPosition())
-                <= PIPE_TURN_TOLERANCE || !pipe.isBusy()) {
+        long remainingTicks = Math.abs((long) pipe.getTargetPosition() - pipe.getCurrentPosition());
+        boolean reachedTarget = remainingTicks <= Math.max(0, PIPE_TURN_TOLERANCE);
+        boolean startupGraceElapsed = pipeTurnTimer.seconds() >= PIPE_TURN_STARTUP_GRACE_SECONDS;
+        boolean controllerStoppedEarly = startupGraceElapsed && !pipe.isBusy() && !reachedTarget;
+        boolean timedOut = pipeTurnTimer.seconds() >= Math.max(0.1, PIPE_TURN_TIMEOUT_SECONDS);
 
-            pipe.setPower(0);
-            pipe.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
-            pipeOneTurnRunning = false;
+        if (reachedTarget) {
+            stopPipeOneTurn(false);
+        } else if (controllerStoppedEarly || timedOut) {
+            // 엔코더/모터 설정이 잘못돼도 RUN_TO_POSITION에 출력이 계속 남지 않게 한다.
+            stopPipeOneTurn(true);
         }
+    }
+
+    private void stopPipeOneTurn(boolean failed) {
+        pipe.setPower(0);
+        pipe.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+        pipeOneTurnRunning = false;
+        pipeOneTurnFailed = failed;
     }
 
     /** 360도 회전 진행 여부 */
     public boolean isPipeOneTurnRunning() {
         return pipeOneTurnRunning;
+    }
+
+    /** 직전 360도 동작이 엔코더 미도달/시간 초과로 끝났는가 */
+    public boolean didPipeOneTurnFail() {
+        return pipeOneTurnFailed;
     }
 
     /** 지금 실제로 등록된 모터들. 슈터가 없으면 2개만 돌려준다. */

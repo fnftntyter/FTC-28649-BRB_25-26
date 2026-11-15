@@ -27,9 +27,9 @@ import org.firstinspires.ftc.teamcode.bioBuzz.pedro.PoseStorage;
  *  좌스틱        이동 (앞뒤좌우)
  *  우스틱 ←→     제자리 회전
  *
- *  X            인테이크 (공 먹기)      ─┐ 누르고 있는 동안만 돈다
- *  Y            파이프 (공 올리기)       ─┤ 손을 떼면 바로 멈춤
- *  B            슈터 (공 발사)          ─┘
+ *  X            인테이크 (공 먹기)       누를 때마다 켜기/끄기
+ *  Y            파이프 (공 올리기)       누를 때마다 360도 회전 후 자동 정지
+ *  B            슈터 (공 발사)           누르고 있는 동안 돈다
  *
  *  LT(왼 트리거)  당기고 있는 동안 정밀 저속
  *  LB           필드중심 ↔ 로봇중심 전환
@@ -211,13 +211,13 @@ public class BioBuzzDriving extends OpMode {
         }
 
 
-// 파이프 (Y) — 한 번 누르면 현재 위치에서 360도 회전
+        // 파이프 (Y) — 한 번 누르면 현재 위치에서 360도 회전
         if (gamepad1.y && !lastY) {
             mechanism.startPipeOneTurn();
         }
         lastY = gamepad1.y;
 
-// 매 루프마다 회전 완료 여부 확인
+        // 매 루프마다 회전 완료/오류 여부 확인
         mechanism.updatePipeOneTurn();
 
         // 슈터 — B를 누르고 있는 동안 돈다.
@@ -263,7 +263,8 @@ public class BioBuzzDriving extends OpMode {
         multipleTelemetry.addLine();
         multipleTelemetry.addData("인테이크(X)", "%.2f", mechanism.intake.getPower());
         multipleTelemetry.addData("파이프(Y)",
-                mechanism.isPipeOneTurnRunning() ? "360도 회전 중" : "대기");
+                mechanism.isPipeOneTurnRunning() ? "360도 회전 중"
+                        : mechanism.didPipeOneTurnFail() ? "정지됨 — 엔코더/기어비 확인" : "대기");
         multipleTelemetry.addData("파이프 현재 엔코더",
                 mechanism.pipe.getCurrentPosition());
 
@@ -273,9 +274,7 @@ public class BioBuzzDriving extends OpMode {
         multipleTelemetry.addData("파이프 isBusy",
                 mechanism.pipe.isBusy());
 
-        multipleTelemetry.addData("파이프 모드",
-                mechanism.pipe.getMode());
-        multipleTelemetry.addData("파이프 엔코더", mechanism.pipe.getCurrentPosition());
+        multipleTelemetry.addData("파이프 모드", mechanism.pipe.getMode());
         multipleTelemetry.addData("슈터(B)", mechanism.shooterAvailable
                 ? String.format("%.2f", mechanism.getShooterPower())
                 : "모터 없음 — 설정에 " + BioBuzzMechanism.NAME_SHOOTER + " 추가 필요");
