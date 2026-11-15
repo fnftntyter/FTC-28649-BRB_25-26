@@ -98,6 +98,13 @@ public class BioBuzzDriving extends OpMode {
     // ────────────────────────────────────────────────
 
     private Follower follower;
+
+    // 기구 토글 상태
+    private boolean intakeToggle = false;
+    private boolean lastX = false;
+
+    private boolean lastY = false;
+
     private BioBuzzMechanism mechanism;
     private MultipleTelemetry multipleTelemetry;
 
@@ -191,17 +198,27 @@ public class BioBuzzDriving extends OpMode {
 
         // ⑥ 기구 모터 — 누르고 있는 동안만 돈다. else로 0을 주지 않으면
         //    손을 떼도 계속 돌아간다 (setPower는 한 번 주면 유지되므로).
-        if (gamepad1.x  ) {
+        // 인테이크 (X) — 누를 때마다 ON/OFF
+        if (gamepad1.x && !lastX) {
+            intakeToggle = !intakeToggle;
+        }
+        lastX = gamepad1.x;
+
+        if (intakeToggle) {
             mechanism.intakeIn();
         } else {
             mechanism.setIntakePower(0);
         }
 
-        if (gamepad1.y) {
-            mechanism.pipeUp();
-        } else {
-            mechanism.setPipePower(0);
+
+// 파이프 (Y) — 한 번 누르면 현재 위치에서 360도 회전
+        if (gamepad1.y && !lastY) {
+            mechanism.startPipeOneTurn();
         }
+        lastY = gamepad1.y;
+
+// 매 루프마다 회전 완료 여부 확인
+        mechanism.updatePipeOneTurn();
 
         // 슈터 — B를 누르고 있는 동안 돈다.
         // 슈터가 설정에 없으면 mechanism 쪽에서 알아서 무시한다.
@@ -245,7 +262,20 @@ public class BioBuzzDriving extends OpMode {
         multipleTelemetry.addData("Follower 상태", follower.mode());
         multipleTelemetry.addLine();
         multipleTelemetry.addData("인테이크(X)", "%.2f", mechanism.intake.getPower());
-        multipleTelemetry.addData("파이프(Y)", "%.2f", mechanism.pipe.getPower());
+        multipleTelemetry.addData("파이프(Y)",
+                mechanism.isPipeOneTurnRunning() ? "360도 회전 중" : "대기");
+        multipleTelemetry.addData("파이프 현재 엔코더",
+                mechanism.pipe.getCurrentPosition());
+
+        multipleTelemetry.addData("파이프 목표 엔코더",
+                mechanism.pipe.getTargetPosition());
+
+        multipleTelemetry.addData("파이프 isBusy",
+                mechanism.pipe.isBusy());
+
+        multipleTelemetry.addData("파이프 모드",
+                mechanism.pipe.getMode());
+        multipleTelemetry.addData("파이프 엔코더", mechanism.pipe.getCurrentPosition());
         multipleTelemetry.addData("슈터(B)", mechanism.shooterAvailable
                 ? String.format("%.2f", mechanism.getShooterPower())
                 : "모터 없음 — 설정에 " + BioBuzzMechanism.NAME_SHOOTER + " 추가 필요");

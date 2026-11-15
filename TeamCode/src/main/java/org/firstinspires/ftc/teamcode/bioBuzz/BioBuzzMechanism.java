@@ -53,6 +53,16 @@ public class BioBuzzMechanism {
     public static double INTAKE_POWER = 0.8;
     /** 파이프가 공을 올릴 때 출력 (0~1) */
     public static double PIPE_POWER = 1.0;
+
+    /** 5203 19.2:1 기어비의 출력축 1회전당 엔코더 카운트 (초기 추정값) */
+    public static double PIPE_TICKS_PER_REV = 537.7;
+
+    /** 파이프 360도 회전 시 모터 출력 */
+    public static double PIPE_TURN_POWER = 0.3;
+
+    /** 1회전 완료 판정 오차 */
+    public static int PIPE_TURN_TOLERANCE = 10;
+
     /**
      * 슈터 출력 (0~1).
      * 발사 거리는 이 값으로 조절한다. 멀리 보내려면 올리고, 너무 멀리 가면 내린다.
@@ -68,6 +78,9 @@ public class BioBuzzMechanism {
     public final DcMotorEx intake;
     /** 슈터. 설정에 없으면 null이다 — 직접 쓰기 전에 {@link #shooterAvailable} 확인. */
     public final DcMotorEx shooter;
+
+    // 파이프 360도 회전 진행 상태
+    private boolean pipeOneTurnRunning = false;
 
     /** 슈터가 설정에 등록돼 있는가. false면 슈터 관련 호출이 전부 무시된다. */
     public final boolean shooterAvailable;
@@ -96,14 +109,17 @@ public class BioBuzzMechanism {
      * (엔코더를 안 꽂은 상태에서 RUN_USING_ENCODER를 쓰면 모터가 제멋대로 돈다)
      */
     private void initMotors() {
-        pipe.setDirection(DcMotorEx.Direction.FORWARD);
+        pipe.setDirection(DcMotorEx.Direction.REVERSE);
         intake.setDirection(DcMotorEx.Direction.REVERSE);
 
-        for (DcMotorEx m : new DcMotorEx[] { pipe, intake }) {
-            m.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
-            // BRAKE — 출력을 끊으면 바로 멈춘다. 파이프 안의 공이 되돌아 내려오는 것도 막아 준다.
-            m.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
-        }
+        // 파이프: 엔코더를 이용한 위치 제어
+        pipe.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+        pipe.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+        pipe.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+
+// 인테이크: 기존처럼 출력 제어
+        intake.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
+        intake.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
 
         if (shooterAvailable) {
             shooter.setDirection(DcMotorEx.Direction.FORWARD);
@@ -177,6 +193,46 @@ public class BioBuzzMechanism {
         setIntakePower(0);
         setPipePower(0);
         shooterOff();
+    }
+
+    /**
+     * 현재 위치에서 파이프를 정방향으로 360도 회전시킨다.
+     */
+    public void startPipeOneTurn() {
+        if (pipeOneTurnRunning) {
+            return;
+        }
+
+        int currentPosition = pipe.getCurrentPosition();
+        int targetPosition = currentPosition - (int) Math.round(PIPE_TICKS_PER_REV);
+
+        pipe.setTargetPosition(targetPosition);
+        pipe.setMode(DcMotor.RunMode.RUN_TO_POSITION);
+        pipe.setPower(Math.abs(PIPE_TURN_POWER));
+
+        pipeOneTurnRunning = true;
+    }
+
+    /**
+     * 회전 완료 여부를 확인하고 완료되면 정지한다.
+     */
+    public void updatePipeOneTurn() {
+        if (!pipeOneTurnRunning) {
+            return;
+        }
+
+        if (Math.abs(pipe.getTargetPosition() - pipe.getCurrentPosition())
+                <= PIPE_TURN_TOLERANCE || !pipe.isBusy()) {
+
+            pipe.setPower(0);
+            pipe.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+            pipeOneTurnRunning = false;
+        }
+    }
+
+    /** 360도 회전 진행 여부 */
+    public boolean isPipeOneTurnRunning() {
+        return pipeOneTurnRunning;
     }
 
     /** 지금 실제로 등록된 모터들. 슈터가 없으면 2개만 돌려준다. */
