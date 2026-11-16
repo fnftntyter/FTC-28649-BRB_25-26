@@ -52,7 +52,7 @@ public class BioBuzzMechanism {
     /** 인테이크가 공을 빨아들일 때 출력 (0~1). 음수를 주면 토해낸다. */
     public static double INTAKE_POWER = 0.8;
     /** 파이프가 공을 올릴 때 출력 (0~1) */
-    public static double PIPE_POWER = 1.0;
+    public static double PIPE_POWER = 0.8;
     /**
      * 슈터 출력 (0~1).
      * 발사 거리는 이 값으로 조절한다. 멀리 보내려면 올리고, 너무 멀리 가면 내린다.

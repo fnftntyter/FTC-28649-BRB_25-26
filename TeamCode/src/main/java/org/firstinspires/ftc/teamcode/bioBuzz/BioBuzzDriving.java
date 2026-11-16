@@ -27,9 +27,9 @@ import org.firstinspires.ftc.teamcode.bioBuzz.pedro.PoseStorage;
  *  좌스틱        이동 (앞뒤좌우)
  *  우스틱 ←→     제자리 회전
  *
- *  X            인테이크 (공 먹기)      ─┐ 누르고 있는 동안만 돈다
- *  Y            파이프 (공 올리기)       ─┤ 손을 떼면 바로 멈춤
- *  B            슈터 (공 발사)          ─┘
+ *  X            인테이크 (공 먹기)      ─┐ 토글 — 한 번 누르면 켜지고
+ *  Y            파이프 (공 올리기)       ─┤ 다시 누르면 꺼진다.
+ *  B            슈터 (공 발사)          ─┘ 손을 떼도 계속 돈다.
  *
  *  LT(왼 트리거)  당기고 있는 동안 정밀 저속
  *  LB           필드중심 ↔ 로봇중심 전환
@@ -44,6 +44,9 @@ import org.firstinspires.ftc.teamcode.bioBuzz.pedro.PoseStorage;
  * 기구 출력 세기는 {@link BioBuzzMechanism#INTAKE_POWER} /
  * {@link BioBuzzMechanism#PIPE_POWER} / {@link BioBuzzMechanism#SHOOTER_POWER}
  * 이고 FtcDashboard에서 실시간으로 조절할 수 있다.
+ * <p>
+ * <b>토글이라 손을 떼도 계속 돈다.</b> 켜 둔 걸 잊지 않도록 텔레메트리의
+ * 인테이크/파이프/슈터 줄에 ON/OFF가 표시된다. OpMode를 STOP하면 셋 다 꺼진다.
  *
  * <h3>필드중심 주행에서 "정면"이란</h3>
  * TeleOp을 시작한 순간 로봇이 보던 방향이 정면이다.
@@ -105,6 +108,13 @@ public class BioBuzzDriving extends OpMode {
     private final PIDController headingPid = Controller.pid(HEADING_LOCK_P, 0.0, HEADING_LOCK_D);
 
     private boolean fieldCentric = true;
+
+    // 기구 on/off 상태 — X / Y / B를 누를 때마다 토글된다.
+    // OpMode를 다시 시작하면 객체가 새로 만들어지므로 전부 false로 돌아간다.
+    private boolean intakeRunning = false;
+    private boolean pipeRunning = false;
+    private boolean shooterRunning = false;
+
     /**
      * 스틱을 놓으면 그 자리를 지키는 기능. 튜닝 전에는 흔들릴 수 있어 기본 OFF.
      * {@code PedroConstants.foresightConfig} 튜닝을 끝낸 뒤 켜 볼 것.
@@ -189,23 +199,33 @@ public class BioBuzzDriving extends OpMode {
             follower.manual(powers);
         }
 
-        // ⑥ 기구 모터 — 누르고 있는 동안만 돈다. else로 0을 주지 않으면
-        //    손을 떼도 계속 돌아간다 (setPower는 한 번 주면 유지되므로).
-        if (gamepad1.x  ) {
+        // ⑥ 기구 모터 — 토글. 한 번 누르면 켜지고, 다시 누르면 꺼진다.
+        //    WasPressed는 "누른 순간"만 true라서 누르고 있어도 한 번만 반응한다.
+        if (gamepad1.xWasPressed()) {
+            intakeRunning = !intakeRunning;
+        }
+        if (gamepad1.yWasPressed()) {
+            pipeRunning = !pipeRunning;
+        }
+        if (gamepad1.bWasPressed()) {
+            shooterRunning = !shooterRunning;
+        }
+
+        // 상태대로 매 루프 출력을 넣어 준다. Dashboard에서 세기를 바꿔도 바로 반영된다.
+        if (intakeRunning) {
             mechanism.intakeIn();
         } else {
             mechanism.setIntakePower(0);
         }
 
-        if (gamepad1.y) {
+        if (pipeRunning) {
             mechanism.pipeUp();
         } else {
             mechanism.setPipePower(0);
         }
 
-        // 슈터 — B를 누르고 있는 동안 돈다.
         // 슈터가 설정에 없으면 mechanism 쪽에서 알아서 무시한다.
-        if (gamepad1.b) {
+        if (shooterRunning) {
             mechanism.shooterOn();
         } else {
             mechanism.shooterOff();
@@ -244,11 +264,14 @@ public class BioBuzzDriving extends OpMode {
         multipleTelemetry.addData("속도 배율", "%.2f", speed);
         multipleTelemetry.addData("Follower 상태", follower.mode());
         multipleTelemetry.addLine();
-        multipleTelemetry.addData("인테이크(X)", "%.2f", mechanism.intake.getPower());
-        multipleTelemetry.addData("파이프(Y)", "%.2f", mechanism.pipe.getPower());
-        multipleTelemetry.addData("슈터(B)", mechanism.shooterAvailable
-                ? String.format("%.2f", mechanism.getShooterPower())
-                : "모터 없음 — 설정에 " + BioBuzzMechanism.NAME_SHOOTER + " 추가 필요");
+        multipleTelemetry.addData("인테이크(X)", "%s  (%.2f)",
+                intakeRunning ? "ON" : "OFF", mechanism.intake.getPower());
+        multipleTelemetry.addData("파이프(Y)", "%s  (%.2f)",
+                pipeRunning ? "ON" : "OFF", mechanism.pipe.getPower());
+        multipleTelemetry.addData("슈터(B)", !mechanism.shooterAvailable
+                ? "모터 없음 — 설정에 " + BioBuzzMechanism.NAME_SHOOTER + " 추가 필요"
+                : String.format("%s  (%.2f)",
+                        shooterRunning ? "ON" : "OFF", mechanism.getShooterPower()));
         multipleTelemetry.addLine();
         multipleTelemetry.addData("위치 X / Y (in)", "%.1f / %.1f", pose.x(), pose.y());
         multipleTelemetry.addData("방향 (deg)", "%.1f", Math.toDegrees(pose.heading()));
