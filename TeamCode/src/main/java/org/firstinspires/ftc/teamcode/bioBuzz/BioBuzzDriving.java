@@ -29,6 +29,7 @@ import org.firstinspires.ftc.teamcode.bioBuzz.pedro.PoseStorage;
  *
  *  X            인테이크 (공 먹기)       누를 때마다 켜기/끄기
  *  Y            파이프 (공 올리기)       누르고 있는 동안 돈다
+ *  RT           파이프 역방향            누르고 있는 동안 돈다 (Y와 함께 누르면 RT 우선)
  *  B            슈터 (공 발사)           누를 때마다 켜기/끄기
  *
  *  LT(왼 트리거)  당기고 있는 동안 정밀 저속
@@ -39,10 +40,10 @@ import org.firstinspires.ftc.teamcode.bioBuzz.pedro.PoseStorage;
  *  dpad ↑←↓→    누르고 있는 동안 그 방향으로 로봇 방향 고정 (필드 기준 0/90/180/270°)
  *  back         지금 로봇이 보는 방향을 "정면"으로 재설정 (필드중심 기준)
  *
- *  A, RT        안 씀 (비어 있음)
+ *  A            안 씀 (비어 있음)
  * </pre>
  * 기구 출력 세기는 {@link BioBuzzMechanism#INTAKE_POWER} /
- * {@link BioBuzzMechanism#PIPE_POWER} / {@link BioBuzzMechanism#SHOOTER_POWER}
+ * {@link BioBuzzMechanism#PIPE_TURN_POWER} / {@link BioBuzzMechanism#SHOOTER_POWER}
  * 이고 FtcDashboard에서 실시간으로 조절할 수 있다.
  *
  * <h3>필드중심 주행에서 "정면"이란</h3>
@@ -66,7 +67,7 @@ public class BioBuzzDriving extends OpMode {
     /** 스틱 중앙 흔들림 무시 범위 */
     public static double STICK_DEADZONE = 0.05;
 
-    /** 트리거를 "당겼다"고 인정하는 깊이 (0~1). LT 정밀 저속에 쓴다. */
+    /** 트리거를 "당겼다"고 인정하는 깊이 (0~1). LT 정밀 저속과 RT 파이프 역방향에 쓴다. */
     public static double TRIGGER_THRESHOLD = 0.3;
 
     /**
@@ -211,8 +212,15 @@ public class BioBuzzDriving extends OpMode {
         }
 
 
-        // 파이프 (Y) — 누르는 동안만 기존 Y 회전 방향과 출력으로 돈다.
-        mechanism.setPipePower(gamepad1.y ? -Math.abs(BioBuzzMechanism.PIPE_TURN_POWER) : 0);
+        // 파이프 (Y/RT) — 누르는 동안만 돈다. 둘을 함께 누르면 RT 역방향이 우선한다.
+        double pipePower = Math.abs(BioBuzzMechanism.PIPE_TURN_POWER);
+        if (gamepad1.right_trigger > TRIGGER_THRESHOLD) {
+            mechanism.setPipePower(pipePower);
+        } else if (gamepad1.y) {
+            mechanism.setPipePower(-pipePower);
+        } else {
+            mechanism.setPipePower(0);
+        }
 
         // 슈터 (B) — 누를 때마다 ON/OFF.
         // 슈터가 설정에 없으면 mechanism 쪽에서 알아서 무시한다.
@@ -260,7 +268,7 @@ public class BioBuzzDriving extends OpMode {
         multipleTelemetry.addData("Follower 상태", follower.mode());
         multipleTelemetry.addLine();
         multipleTelemetry.addData("인테이크(X)", "%.2f", mechanism.intake.getPower());
-        multipleTelemetry.addData("파이프(Y)", "%.2f", mechanism.pipe.getPower());
+        multipleTelemetry.addData("파이프(Y/RT)", "%.2f", mechanism.pipe.getPower());
         multipleTelemetry.addData("파이프 현재 엔코더",
                 mechanism.pipe.getCurrentPosition());
         multipleTelemetry.addData("파이프 모드", mechanism.pipe.getMode());

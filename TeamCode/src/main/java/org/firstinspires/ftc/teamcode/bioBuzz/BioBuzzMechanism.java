@@ -59,7 +59,7 @@ public class BioBuzzMechanism {
     public static double PIPE_TICKS_PER_REV = 537.7;
 
     /** Y 버튼을 누르고 있는 동안의 파이프 출력 (기존 1회전 동작에도 사용) */
-    public static double PIPE_TURN_POWER = 0.3;
+    public static double PIPE_TURN_POWER = 0.8;
 
     /** 1회전 완료 판정 오차 */
     public static int PIPE_TURN_TOLERANCE = 10;
@@ -75,7 +75,7 @@ public class BioBuzzMechanism {
      * 발사 거리는 이 값으로 조절한다. 멀리 보내려면 올리고, 너무 멀리 가면 내린다.
      * 실제 발사 시험은 기구를 달고 나서 — 지금은 자리만 잡아 둔 값이다.
      */
-    public static double SHOOTER_POWER = 0.5;
+    public static double SHOOTER_POWER = 0.68;
 
     // ────────────────────────────────────────────────
     //  하드웨어
