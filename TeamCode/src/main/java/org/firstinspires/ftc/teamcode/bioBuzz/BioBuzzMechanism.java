@@ -75,7 +75,7 @@ public class BioBuzzMechanism {
      * 발사 거리는 이 값으로 조절한다. 멀리 보내려면 올리고, 너무 멀리 가면 내린다.
      * 실제 발사 시험은 기구를 달고 나서 — 지금은 자리만 잡아 둔 값이다.
      */
-    public static double SHOOTER_POWER = 0.68;
+    public static double SHOOTER_POWER = 0.62;
 
     // ────────────────────────────────────────────────
     //  하드웨어

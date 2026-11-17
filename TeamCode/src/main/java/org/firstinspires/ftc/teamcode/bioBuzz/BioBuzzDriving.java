@@ -70,6 +70,9 @@ public class BioBuzzDriving extends OpMode {
     /** 트리거를 "당겼다"고 인정하는 깊이 (0~1). LT 정밀 저속과 RT 파이프 역방향에 쓴다. */
     public static double TRIGGER_THRESHOLD = 0.3;
 
+    /** RT를 누르는 동안 파이프 역방향 출력 (0~1) */
+    public static double PIPE_REVERSE_POWER = 0.4;
+
     /**
      * dpad 방향 고정의 회전 세기 (P 게인).
      * 목표 방향을 지나쳐서 흔들리면 줄이고, 너무 느리게 돌면 키운다.
@@ -215,7 +218,7 @@ public class BioBuzzDriving extends OpMode {
         // 파이프 (Y/RT) — 누르는 동안만 돈다. 둘을 함께 누르면 RT 역방향이 우선한다.
         double pipePower = Math.abs(BioBuzzMechanism.PIPE_TURN_POWER);
         if (gamepad1.right_trigger > TRIGGER_THRESHOLD) {
-            mechanism.setPipePower(pipePower);
+            mechanism.setPipePower(Math.abs(PIPE_REVERSE_POWER));
         } else if (gamepad1.y) {
             mechanism.setPipePower(-pipePower);
         } else {
