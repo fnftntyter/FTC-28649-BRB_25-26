@@ -270,13 +270,15 @@ public class BioBuzzDriving extends OpMode {
         multipleTelemetry.addData("속도 배율", "%.2f", speed);
         multipleTelemetry.addData("Follower 상태", follower.mode());
         multipleTelemetry.addLine();
-        multipleTelemetry.addData("인테이크(X)", "%.2f", mechanism.intake.getPower());
+        multipleTelemetry.addData("인테이크(X)", "%s  (%.2f)",
+                intakeToggle ? "ON" : "OFF", mechanism.intake.getPower());
         multipleTelemetry.addData("파이프(Y/RT)", "%.2f", mechanism.pipe.getPower());
         multipleTelemetry.addData("파이프 현재 엔코더",
                 mechanism.pipe.getCurrentPosition());
         multipleTelemetry.addData("파이프 모드", mechanism.pipe.getMode());
         multipleTelemetry.addData("슈터(B)", mechanism.shooterAvailable
-                ? String.format("%.2f", mechanism.getShooterPower())
+                ? String.format("%s  (%.2f)",
+                        shooterToggle ? "ON" : "OFF", mechanism.getShooterPower())
                 : "모터 없음 — 설정에 " + BioBuzzMechanism.NAME_SHOOTER + " 추가 필요");
         multipleTelemetry.addLine();
         multipleTelemetry.addData("위치 X / Y (in)", "%.1f / %.1f", pose.x(), pose.y());

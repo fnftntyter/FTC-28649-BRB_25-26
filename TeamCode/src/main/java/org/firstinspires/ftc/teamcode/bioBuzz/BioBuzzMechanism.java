@@ -53,7 +53,7 @@ public class BioBuzzMechanism {
     /** 인테이크가 공을 빨아들일 때 출력 (0~1). 음수를 주면 토해낸다. */
     public static double INTAKE_POWER = 0.8;
     /** 파이프가 공을 올릴 때 출력 (0~1) */
-    public static double PIPE_POWER = 1.0;
+    public static double PIPE_POWER = 0.8;
 
     /** 5203 19.2:1 기어비의 출력축 1회전당 엔코더 카운트 (초기 추정값) */
     public static double PIPE_TICKS_PER_REV = 537.7;
