@@ -65,7 +65,7 @@ public class BioBuzzMechanism {
     public static int PIPE_TURN_TOLERANCE = 10;
 
     /** 엔코더가 목표에 도달하지 못할 때 계속 도는 것을 막는 안전 제한 시간 */
-    public static double PIPE_TURN_TIMEOUT_SECONDS = 3.0;
+    public static double PIPE_TURN_TIMEOUT_SECONDS = 1.5;
 
     /** RUN_TO_POSITION 명령 직후 isBusy() 상태가 갱신될 때까지 기다리는 시간 */
     private static final double PIPE_TURN_STARTUP_GRACE_SECONDS = 0.15;
