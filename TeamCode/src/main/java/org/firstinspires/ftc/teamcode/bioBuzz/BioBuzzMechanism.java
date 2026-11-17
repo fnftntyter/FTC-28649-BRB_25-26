@@ -58,7 +58,7 @@ public class BioBuzzMechanism {
     /** 5203 19.2:1 기어비의 출력축 1회전당 엔코더 카운트 (초기 추정값) */
     public static double PIPE_TICKS_PER_REV = 537.7;
 
-    /** 파이프 360도 회전 시 모터 출력 */
+    /** Y 버튼을 누르고 있는 동안의 파이프 출력 (기존 1회전 동작에도 사용) */
     public static double PIPE_TURN_POWER = 0.3;
 
     /** 1회전 완료 판정 오차 */
@@ -75,7 +75,7 @@ public class BioBuzzMechanism {
      * 발사 거리는 이 값으로 조절한다. 멀리 보내려면 올리고, 너무 멀리 가면 내린다.
      * 실제 발사 시험은 기구를 달고 나서 — 지금은 자리만 잡아 둔 값이다.
      */
-    public static double SHOOTER_POWER = 0.8;
+    public static double SHOOTER_POWER = 0.5;
 
     // ────────────────────────────────────────────────
     //  하드웨어
@@ -112,17 +112,16 @@ public class BioBuzzMechanism {
      * 파이프와 인테이크 방향은 현재 {@code REVERSE}로 설정했다.
      * 실제 기구에서 양수 출력이 공을 올리고 먹는 방향인지 확인해야 한다.
      * <p>
-     * 파이프는 엔코더를 초기화한 뒤 {@code RUN_USING_ENCODER}로 둔다.
-     * 한 바퀴 동작은 {@code RUN_TO_POSITION}을 사용하므로 엔코더 피드백이 필요하다.
-     * 인테이크는 {@code RUN_WITHOUT_ENCODER}를 사용한다.
+     * 파이프와 인테이크는 누르는 동안 출력이 바로 반영되도록
+     * {@code RUN_WITHOUT_ENCODER}를 사용한다.
      */
     private void initMotors() {
         pipe.setDirection(DcMotorEx.Direction.REVERSE);
         intake.setDirection(DcMotorEx.Direction.REVERSE);
 
-        // 파이프: 엔코더를 이용한 위치 제어
-        pipe.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
-        pipe.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+        // 파이프: 엔코더 목표 없이 버튼을 누르는 동안 직접 출력 제어
+        pipe.setPower(0);
+        pipe.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
         pipe.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
 
         // 인테이크: 기존처럼 출력 제어
@@ -199,7 +198,11 @@ public class BioBuzzMechanism {
     /** 전부 정지. OpMode의 stop()에서 꼭 불러 줄 것. */
     public void stop() {
         setIntakePower(0);
-        stopPipeOneTurn(false);
+        if (pipeOneTurnRunning) {
+            stopPipeOneTurn(false);
+        } else {
+            setPipePower(0);
+        }
         shooterOff();
     }
 

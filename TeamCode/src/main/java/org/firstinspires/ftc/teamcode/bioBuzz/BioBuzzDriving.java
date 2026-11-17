@@ -28,8 +28,8 @@ import org.firstinspires.ftc.teamcode.bioBuzz.pedro.PoseStorage;
  *  우스틱 ←→     제자리 회전
  *
  *  X            인테이크 (공 먹기)       누를 때마다 켜기/끄기
- *  Y            파이프 (공 올리기)       누를 때마다 360도 회전 후 자동 정지
- *  B            슈터 (공 발사)           누르고 있는 동안 돈다
+ *  Y            파이프 (공 올리기)       누르고 있는 동안 돈다
+ *  B            슈터 (공 발사)           누를 때마다 켜기/끄기
  *
  *  LT(왼 트리거)  당기고 있는 동안 정밀 저속
  *  LB           필드중심 ↔ 로봇중심 전환
@@ -103,7 +103,8 @@ public class BioBuzzDriving extends OpMode {
     private boolean intakeToggle = false;
     private boolean lastX = false;
 
-    private boolean lastY = false;
+    private boolean shooterToggle = false;
+    private boolean lastB = false;
 
     private BioBuzzMechanism mechanism;
     private MultipleTelemetry multipleTelemetry;
@@ -196,8 +197,7 @@ public class BioBuzzDriving extends OpMode {
             follower.manual(powers);
         }
 
-        // ⑥ 기구 모터 — 누르고 있는 동안만 돈다. else로 0을 주지 않으면
-        //    손을 떼도 계속 돌아간다 (setPower는 한 번 주면 유지되므로).
+        // ⑥ 기구 모터 — 각 버튼의 토글/누름 상태를 매 루프 출력에 반영한다.
         // 인테이크 (X) — 누를 때마다 ON/OFF
         if (gamepad1.x && !lastX) {
             intakeToggle = !intakeToggle;
@@ -211,18 +211,16 @@ public class BioBuzzDriving extends OpMode {
         }
 
 
-        // 파이프 (Y) — 한 번 누르면 현재 위치에서 360도 회전
-        if (gamepad1.y && !lastY) {
-            mechanism.startPipeOneTurn();
-        }
-        lastY = gamepad1.y;
+        // 파이프 (Y) — 누르는 동안만 기존 Y 회전 방향과 출력으로 돈다.
+        mechanism.setPipePower(gamepad1.y ? -Math.abs(BioBuzzMechanism.PIPE_TURN_POWER) : 0);
 
-        // 매 루프마다 회전 완료/오류 여부 확인
-        mechanism.updatePipeOneTurn();
-
-        // 슈터 — B를 누르고 있는 동안 돈다.
+        // 슈터 (B) — 누를 때마다 ON/OFF.
         // 슈터가 설정에 없으면 mechanism 쪽에서 알아서 무시한다.
-        if (gamepad1.b) {
+        if (gamepad1.b && !lastB) {
+            shooterToggle = !shooterToggle;
+        }
+        lastB = gamepad1.b;
+        if (shooterToggle) {
             mechanism.shooterOn();
         } else {
             mechanism.shooterOff();
@@ -262,18 +260,9 @@ public class BioBuzzDriving extends OpMode {
         multipleTelemetry.addData("Follower 상태", follower.mode());
         multipleTelemetry.addLine();
         multipleTelemetry.addData("인테이크(X)", "%.2f", mechanism.intake.getPower());
-        multipleTelemetry.addData("파이프(Y)",
-                mechanism.isPipeOneTurnRunning() ? "360도 회전 중"
-                        : mechanism.didPipeOneTurnFail() ? "정지됨 — 엔코더/기어비 확인" : "대기");
+        multipleTelemetry.addData("파이프(Y)", "%.2f", mechanism.pipe.getPower());
         multipleTelemetry.addData("파이프 현재 엔코더",
                 mechanism.pipe.getCurrentPosition());
-
-        multipleTelemetry.addData("파이프 목표 엔코더",
-                mechanism.pipe.getTargetPosition());
-
-        multipleTelemetry.addData("파이프 isBusy",
-                mechanism.pipe.isBusy());
-
         multipleTelemetry.addData("파이프 모드", mechanism.pipe.getMode());
         multipleTelemetry.addData("슈터(B)", mechanism.shooterAvailable
                 ? String.format("%.2f", mechanism.getShooterPower())
