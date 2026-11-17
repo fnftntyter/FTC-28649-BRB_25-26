@@ -20,32 +20,59 @@ import static com.pedropathing.api.Paths.line;
  * 이 파일에는 "무엇을 어떤 순서로 하는가"만 있다.
  * "어디로 가는가"(좌표)는 {@link BioBuzzAutoRed}, {@link BioBuzzAutoBlue}에 따로 있다.
  *
- * <h3>AUTO 30초 동안 하는 일 (BIOBUZZ 득점 기준)</h3>
+ * <h3>AUTO 30초 동안 하는 일</h3>
  * <pre>
- *  ① 출발 위치 → 발사 위치로 이동          LEAVE 3점 (끝날 때 벽에 안 닿아 있으면)
- *  ② 미리 실은 POLLEN 4개 발사             HIVE TIP 20점 (위를 향한 CELL에 넣어 기울이면)
- *  ③ 발사 위치 → LOADING ZONE으로 이동     PARK 5점 (끝날 때 일부라도 들어가 있으면)
+ *  ① 출발 위치 → 앞으로 이동 (벽에서 떨어진다)
+ *  ② 돌아와서 LOADING ZONE으로 이동 → 거기서 제자리 유지
  * </pre>
- * ②의 발사 동작은 아직 발사 장치가 없어서 <b>그냥 기다리기만 한다.</b>
- * 장치를 만들면 아래 "발사 장치 자리" 메소드 4개만 채우면 된다.
+ * 노리는 점수는 <b>LEAVE 3점 + PARK 5점 = 8점</b>이다. 발사(HIVE TIP)는 안 한다.
+ *
+ * <h3>두 점수 모두 "AUTO가 끝나는 순간"에 판정된다</h3>
+ * <ul>
+ *   <li>LEAVE 3점 — 끝났을 때 로봇이 필드 벽에 <b>닿아 있지 않으면</b></li>
+ *   <li>PARK 5점 — 끝났을 때 로봇이 LOADING ZONE에 <b>일부라도 들어가 있으면</b></li>
+ * </ul>
+ * 즉 중요한 건 <b>마지막에 멈춘 자리</b>다. 파킹 지점이 벽에 닿아 있으면
+ * PARK는 받고 LEAVE를 놓치므로, {@code parkPose()}는 존 안에 걸치되 벽에서 떨어뜨려야 한다.
+ * <p>
+ * 발사 동작을 넣을 때는 {@code loop()}의 {@code DRIVE_FORWARD} 단계가 끝나는 자리에 끼운다.
  *
  * <h3>좌표계 (팀 약속 — RED/BLUE 파일 모두 이 기준)</h3>
+ * 공식 타일 격자(A~F열 × 1~6행)를 그대로 좌표로 쓴다. 타일 한 칸 = 24인치.
  * <pre>
- *            먼 쪽 벽 (관중 반대편)
- *        y=144 ┌──────────────────┐
- *              │  A  B  C │ D  E  F │
- *   RED 벽     │   RED 쪽 │ BLUE 쪽 │    BLUE 벽
- *   (x = 0)    │          │         │    (x = 144)
- *              │          │         │
- *          y=0 └──────────────────┘
- *            x=0   관중석 쪽 벽    x=144
+ *                     먼 쪽 벽 (관중 반대편)
+ *          y=144 ┌─────┬─────┬─────┬─────┬─────┬─────┐
+ *                │ A6  │ B6  │ C6  │ D6  │ E6  │ F6  │ ← BLUE GARDEN
+ *          y=120 ├─────┼─────┼─────┼─────┼─────┼─────┤
+ *  RED LZ →      │ A5  │ B5  │ C5  │ D5  │ E5  │ F5  │
+ *          y= 96 ├─────┼─────┼─────┼─────┼─────┼─────┤
+ *   RED 벽       │ A4  │ B4  │ C4  │ D4  │ E4  │ F4  │      BLUE 벽
+ *   (x = 0)  y=72├─────┼─────┼─────┼─────┼─────┼─────┤      (x = 144)
+ *                │ A3  │ B3  │ C3  │ D3  │ E3  │ F3  │
+ *          y= 48 ├─────┼─────┼─────┼─────┼─────┼─────┤
+ *                │ A2  │ B2  │ C2  │ D2  │ E2  │ F2  │ ← BLUE LZ
+ *          y= 24 ├─────┼─────┼─────┼─────┼─────┼─────┤
+ *  RED GARDEN →  │ A1  │ B1  │ C1  │ D1  │ E1  │ F1  │
+ *           y= 0 └─────┴─────┴─────┴─────┴─────┴─────┘
+ *                x=0        관중석 쪽 벽          x=144
+ *                ╰── RED 쪽 (A·B·C) ─╯╰─ BLUE 쪽 (D·E·F) ─╯
  * </pre>
  * <ul>
  *   <li>원점 (0, 0) = 관중석 쪽 벽과 RED 쪽 벽이 만나는 모서리</li>
  *   <li>+x = RED 벽 → BLUE 벽 방향, +y = 관중석 → 먼 쪽 방향, 단위 inch</li>
  *   <li>방향(heading) 0° = +x를 바라봄, 반시계(위에서 볼 때)가 +</li>
- *   <li>필드 중앙 = (72, 72). RED 쪽은 x &lt; 72, BLUE 쪽은 x &gt; 72</li>
+ *   <li>필드 중앙 = (72, 72) — 여기에 HIVE 구조물이 있다</li>
+ *   <li>타일 중심 좌표: x = (열번호−1)×24 + 12, y = (행번호−1)×24 + 12</li>
  * </ul>
+ *
+ * <h3>⚠ 한 가지 확인 안 된 것 — 1행이 관중석 쪽인지</h3>
+ * LOADING ZONE과 GARDEN의 <b>타일 이름</b>(A5/F2, A1/F6)은 Event Field Setup Guide
+ * 8.3·8.4에 글로 적혀 있어 확실하다. 하지만 1행이 관중석 쪽인지 먼 쪽인지는
+ * 그림(Figure 6-2)에만 있어서 읽지 못했다. 위 그림은 <b>1행 = 관중석 쪽</b>으로 가정한 것이다.
+ * <p>
+ * 실제 필드에서 RED LOADING ZONE 테이프가 관중석 쪽에 가깝다면 가정이 뒤집힌 것이다.
+ * 그때는 RED/BLUE 파일의 <b>모든 y값을 {@code 144 − y}로</b> 바꾸면 된다
+ * (x와 방향은 그대로). 필드가 180° 회전 대칭이라 그 변환만으로 맞는다.
  */
 @Config
 public abstract class BioBuzzAutoBase extends OpMode {
@@ -54,11 +81,8 @@ public abstract class BioBuzzAutoBase extends OpMode {
     //  공통 조정값 — FtcDashboard에서 실시간으로 바꿀 수 있다
     // ────────────────────────────────────────────────
 
-    /** 발사에 쓰는 시간 (초). 발사 장치가 생기기 전까지는 그냥 이만큼 기다린다. */
-    public static double LAUNCH_WAIT_S = 3.0;
-
     /**
-     * 이 시각(AUTO 시작 후 초)이 지나면 하던 일을 버리고 바로 파킹하러 간다.
+     * 이 시각(AUTO 시작 후 초)이 지나면 앞으로 가던 걸 포기하고 바로 파킹하러 간다.
      * AUTO는 30초다. 파킹 이동 시간을 재서 30 − (이동시간 + 여유 2초) 정도로 맞출 것.
      */
     public static double PARK_DEADLINE_S = 25.0;
@@ -82,8 +106,8 @@ public abstract class BioBuzzAutoBase extends OpMode {
     /** 출발 위치 — 관중석 쪽(가까운 쪽) */
     protected abstract Pose startNearPose();
 
-    /** 발사할 때 서 있을 위치와 방향 */
-    protected abstract Pose launchPose();
+    /** 앞으로 나갔다가 돌아올 지점. 벽에서 확실히 떨어지게만 하면 된다. */
+    protected abstract Pose forwardPose();
 
     /** 파킹 위치 (LOADING ZONE) */
     protected abstract Pose parkPose();
@@ -100,9 +124,8 @@ public abstract class BioBuzzAutoBase extends OpMode {
     public enum StartSpot { FAR, NEAR }
 
     private enum Step {
-        DRIVE_TO_LAUNCH,   // ① 발사 위치로 이동 중
-        LAUNCHING,         // ② 발사 중
-        DRIVE_TO_PARK,     // ③ 파킹하러 이동 중
+        DRIVE_FORWARD,     // ① 앞으로 나가는 중 (벽에서 떨어진다)
+        DRIVE_TO_PARK,     // ② 돌아와서 파킹하러 이동 중
         DONE               // 끝. 제자리 유지
     }
 
@@ -110,7 +133,7 @@ public abstract class BioBuzzAutoBase extends OpMode {
     private MultipleTelemetry multipleTelemetry;
 
     private StartSpot startSpot = StartSpot.FAR;
-    private Step step = Step.DRIVE_TO_LAUNCH;
+    private Step step = Step.DRIVE_FORWARD;
 
     /** AUTO 시작부터 흐른 시간 */
     private final ElapsedTime autoTimer = new ElapsedTime();
@@ -153,8 +176,8 @@ public abstract class BioBuzzAutoBase extends OpMode {
         // 로봇이 지금 어디 있는지 Pedro에게 알려준다. 이게 틀리면 모든 경로가 밀린다.
         follower.setPose(selectedStartPose());
 
-        goTo(launchPose());
-        step = Step.DRIVE_TO_LAUNCH;
+        goTo(forwardPose());
+        step = Step.DRIVE_FORWARD;
     }
 
     @Override
@@ -162,28 +185,17 @@ public abstract class BioBuzzAutoBase extends OpMode {
         // 매 루프 반드시 한 번. 위치를 갱신하고 모터 출력을 계산한다.
         follower.update();
 
-        // 시간이 다 돼 가면 무조건 파킹 (파킹 5점을 놓치지 않도록)
-        if (autoTimer.seconds() > PARK_DEADLINE_S
-                && (step == Step.DRIVE_TO_LAUNCH || step == Step.LAUNCHING)) {
-            stopLaunch();
+        // 시간이 다 돼 가면 앞으로 가던 걸 포기하고 바로 파킹 (파킹 5점을 놓치지 않도록)
+        if (autoTimer.seconds() > PARK_DEADLINE_S && step == Step.DRIVE_FORWARD) {
             goTo(parkPose());
             step = Step.DRIVE_TO_PARK;
         }
 
         switch (step) {
-            case DRIVE_TO_LAUNCH:
+            case DRIVE_FORWARD:
                 if (pathFinished()) {
-                    follower.hold(launchPose());   // 발사하는 동안 밀려도 제자리 유지
-                    stepTimer.reset();
-                    startLaunch();
-                    step = Step.LAUNCHING;
-                }
-                break;
-
-            case LAUNCHING:
-                updateLaunch();
-                if (launchFinished()) {
-                    stopLaunch();
+                    // 도착했으면 바로 돌아서 파킹하러 간다.
+                    // (여기가 나중에 발사 동작을 끼워 넣을 자리다)
                     goTo(parkPose());
                     step = Step.DRIVE_TO_PARK;
                 }
@@ -209,7 +221,6 @@ public abstract class BioBuzzAutoBase extends OpMode {
     @Override
     public void stop() {
         PoseStorage.lastPose = follower.pose();
-        stopLaunch();
         follower.stop();
         super.stop();
     }
@@ -236,31 +247,6 @@ public abstract class BioBuzzAutoBase extends OpMode {
 
     private Pose selectedStartPose() {
         return startSpot == StartSpot.FAR ? startFarPose() : startNearPose();
-    }
-
-    // ────────────────────────────────────────────────
-    //  발사 장치 자리 — 아직 장치가 없어서 비어 있다
-    //  장치를 만들면 여기 4개만 채우면 된다. (RED/BLUE는 안 건드려도 됨)
-    // ────────────────────────────────────────────────
-
-    /** 발사 시작. 예: 슈터 휠 켜기 */
-    protected void startLaunch() {
-        // TODO 발사 장치를 만들면 채울 것
-    }
-
-    /** 발사 중 매 루프 호출. 예: 휠 속도가 맞으면 한 발씩 밀어넣기 */
-    protected void updateLaunch() {
-        // TODO
-    }
-
-    /** 발사가 끝났는가. 지금은 시간만 본다. 장치가 생기면 "4발 다 쐈는가"로 바꿀 것. */
-    protected boolean launchFinished() {
-        return stepTimer.seconds() >= LAUNCH_WAIT_S;
-    }
-
-    /** 발사 장치 정지. 여러 번 불려도 안전해야 한다. */
-    protected void stopLaunch() {
-        // TODO
     }
 
     // ────────────────────────────────────────────────

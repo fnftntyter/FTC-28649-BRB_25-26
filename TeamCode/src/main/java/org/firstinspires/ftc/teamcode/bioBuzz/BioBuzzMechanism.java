@@ -3,7 +3,6 @@ package org.firstinspires.ftc.teamcode.bioBuzz;
 import com.acmerobotics.dashboard.config.Config;
 import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
-import com.qualcomm.robotcore.hardware.DcMotorSimple;
 import com.qualcomm.robotcore.hardware.HardwareMap;
 import com.qualcomm.robotcore.util.ElapsedTime;
 import com.qualcomm.robotcore.util.Range;
@@ -146,8 +145,18 @@ public class BioBuzzMechanism {
         intake.setPower(Range.clip(power, -1.0, 1.0));
     }
 
-    /** 파이프 직접 제어. 양수 = 올리기, 음수 = 내리기 */
+    /**
+     * 파이프 직접 제어(자유 회전). <b>음수 = 올리기, 양수 = 내리기</b>
+     * (BioBuzzDriving의 Y 버튼이 음수로 올리는 것과 같은 규약).
+     * <p>
+     * 한 바퀴 동작({@link #startPipeOneTurn()}) 중이면 그걸 먼저 취소한다.
+     * RUN_TO_POSITION 상태에서 setPower만 부르면 자유 회전이 되는 게 아니라
+     * "목표까지 가는 속도"만 바뀌어서, 부르는 쪽에서 보면 전혀 다르게 동작한다.
+     */
     public void setPipePower(double power) {
+        if (pipeOneTurnRunning) {
+            stopPipeOneTurn(false);
+        }
         pipe.setPower(Range.clip(power, -1.0, 1.0));
     }
 
@@ -159,12 +168,14 @@ public class BioBuzzMechanism {
         setIntakePower(-INTAKE_POWER);
     }
 
+    /** 공을 올리는 방향으로 자유 회전. 이 로봇은 <b>음수가 올리는 방향</b>이다. */
     public void pipeUp() {
-        setPipePower(PIPE_POWER);
+        setPipePower(-PIPE_POWER);
     }
 
+    /** 역방향(내리는 방향) 자유 회전. */
     public void pipeDown() {
-        setPipePower(-PIPE_POWER);
+        setPipePower(PIPE_POWER);
     }
 
     // ────────────────────────────────────────────────
