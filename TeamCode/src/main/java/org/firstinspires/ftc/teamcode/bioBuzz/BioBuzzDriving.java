@@ -43,8 +43,8 @@ import org.firstinspires.ftc.teamcode.bioBuzz.pedro.PoseStorage;
  *  A            안 씀 (비어 있음)
  * </pre>
  * 기구 출력 세기는 {@link BioBuzzMechanism#INTAKE_POWER} /
- * {@link BioBuzzMechanism#PIPE_TURN_POWER} / {@link BioBuzzMechanism#SHOOTER_POWER}
- * 이고 FtcDashboard에서 실시간으로 조절할 수 있다.
+ * {@link BioBuzzMechanism#PIPE_TURN_POWER}, 슈터 목표 속도는
+ * {@link BioBuzzMechanism#SHOOTER_TARGET_RPM}이며 FtcDashboard에서 실시간 조절할 수 있다.
  *
  * <h3>필드중심 주행에서 "정면"이란</h3>
  * TeleOp을 시작한 순간 로봇이 보던 방향이 정면이다.
@@ -225,7 +225,7 @@ public class BioBuzzDriving extends OpMode {
             mechanism.setPipePower(0);
         }
 
-        // 슈터 (B) — 누를 때마다 ON/OFF.
+        // 슈터 (B) — 누를 때마다 목표 RPM 유지 ON/OFF.
         // 슈터가 설정에 없으면 mechanism 쪽에서 알아서 무시한다.
         if (gamepad1.b && !lastB) {
             shooterToggle = !shooterToggle;
@@ -277,9 +277,17 @@ public class BioBuzzDriving extends OpMode {
                 mechanism.pipe.getCurrentPosition());
         multipleTelemetry.addData("파이프 모드", mechanism.pipe.getMode());
         multipleTelemetry.addData("슈터(B)", mechanism.shooterAvailable
-                ? String.format("%s  (%.2f)",
-                        shooterToggle ? "ON" : "OFF", mechanism.getShooterPower())
+                ? (shooterToggle ? "ON — RPM 제어" : "OFF")
                 : "모터 없음 — 설정에 " + BioBuzzMechanism.NAME_SHOOTER + " 추가 필요");
+        if (mechanism.shooterAvailable) {
+            double targetRpm = mechanism.getShooterTargetRpm();
+            double actualRpm = mechanism.getShooterRpm();
+            multipleTelemetry.addData("슈터 목표 RPM", "%.0f", targetRpm);
+            multipleTelemetry.addData("슈터 실제 RPM", "%.0f", actualRpm);
+            multipleTelemetry.addData("슈터 RPM 오차", "%.0f", targetRpm - actualRpm);
+            multipleTelemetry.addData("슈터 목표 속도 도달", mechanism.isShooterAtSpeed());
+            multipleTelemetry.addData("슈터 ticks/rev", mechanism.getShooterTicksPerRev());
+        }
         multipleTelemetry.addLine();
         multipleTelemetry.addData("위치 X / Y (in)", "%.1f / %.1f", pose.x(), pose.y());
         multipleTelemetry.addData("방향 (deg)", "%.1f", Math.toDegrees(pose.heading()));

@@ -69,12 +69,20 @@ public class BioBuzzMechanism {
     /** RUN_TO_POSITION 명령 직후 isBusy() 상태가 갱신될 때까지 기다리는 시간 */
     private static final double PIPE_TURN_STARTUP_GRACE_SECONDS = 0.15;
 
-    /**
-     * 슈터 출력 (0~1).
-     * 발사 거리는 이 값으로 조절한다. 멀리 보내려면 올리고, 너무 멀리 가면 내린다.
-     * 실제 발사 시험은 기구를 달고 나서 — 지금은 자리만 잡아 둔 값이다.
-     */
-    public static double SHOOTER_POWER = 0.62;
+    /** 모터 출력축 목표 RPM. 6000 RPM × 기존 출력 0.62로 잡은 초기 추정값. */
+    public static double SHOOTER_TARGET_RPM = 3720.0;
+    /** 모터 출력축 최대 RPM. 외부 풀리/기어 뒤의 플라이휠 RPM과는 다를 수 있다. */
+    public static double SHOOTER_MAX_RPM = 6000.0;
+    /** 출력축 1회전당 엔코더 카운트. 0이면 Robot Configuration의 모터 사양 사용. */
+    public static double SHOOTER_TICKS_PER_REV = 0.0;
+    /** REV Hub 속도 PIDF 초기값. 실제 슈터에서 튜닝 필요; 단위는 RPM이 아닌 ticks/s. */
+    public static double SHOOTER_P = 10.0;
+    public static double SHOOTER_I = 3.0;
+    public static double SHOOTER_D = 0.0;
+    /** -1이면 32767 / 최대 ticks/s로 계산. 0 이상이면 이 F 값을 직접 사용. */
+    public static double SHOOTER_F = -1.0;
+    /** 목표 속도 도달 표시용 허용 오차. 자동 발사 조건은 아니다. */
+    public static double SHOOTER_RPM_TOLERANCE = 100.0;
 
     // ────────────────────────────────────────────────
     //  하드웨어
@@ -84,6 +92,12 @@ public class BioBuzzMechanism {
     public final DcMotorEx intake;
     /** 슈터. 설정에 없으면 null이다 — 직접 쓰기 전에 {@link #shooterAvailable} 확인. */
     public final DcMotorEx shooter;
+
+    private double shooterTargetRpm = 0.0;
+    private double appliedShooterP = Double.NaN;
+    private double appliedShooterI = Double.NaN;
+    private double appliedShooterD = Double.NaN;
+    private double appliedShooterF = Double.NaN;
 
     // 파이프 360도 회전 진행 상태
     private boolean pipeOneTurnRunning = false;
@@ -129,7 +143,8 @@ public class BioBuzzMechanism {
 
         if (shooterAvailable) {
             shooter.setDirection(DcMotorEx.Direction.FORWARD);
-            shooter.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
+            shooter.setPower(0);
+            shooter.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
             // 슈터만 FLOAT — 플라이휠을 매번 급제동시키면 기어박스에 부담이 크다.
             // 출력을 끊으면 관성으로 천천히 멈춘다.
             shooter.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
@@ -182,24 +197,103 @@ public class BioBuzzMechanism {
     //  슈터 — 슈터가 설정에 없으면 전부 조용히 무시된다
     // ────────────────────────────────────────────────
 
-    /** 슈터 직접 제어. 양수 = 발사 방향. 슈터가 없으면 아무 일도 하지 않는다. */
+    /** 수동 출력 시험용. RPM 제어를 해제한다. 일반 발사는 shooterOn/setShooterRpm 사용. */
     public void setShooterPower(double power) {
+        shooterTargetRpm = 0.0;
         if (!shooterAvailable) {
             return;
+        }
+        if (shooter.getMode() != DcMotor.RunMode.RUN_WITHOUT_ENCODER) {
+            shooter.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
+        }
+        if (!Double.isFinite(power)) {
+            power = 0.0;
         }
         shooter.setPower(Range.clip(power, -1.0, 1.0));
     }
 
-    /** 슈터를 {@link #SHOOTER_POWER} 세기로 돌린다. */
+    /** Dashboard 목표 RPM으로 회전. TeleOp에서 매 루프 호출하면 설정 변경도 반영된다. */
     public void shooterOn() {
-        setShooterPower(SHOOTER_POWER);
+        setShooterRpm(SHOOTER_TARGET_RPM);
+    }
+
+    /**
+     * REV Hub 내장 PIDF로 목표 속도를 유지한다. 엔코더 연결과 정확한 모터 설정이 필요하다.
+     * 한 번 호출해도 Hub에서 제어가 계속된다. 0 이하/잘못된 설정은 정지 처리한다.
+     */
+    public void setShooterRpm(double rpm) {
+        if (!shooterAvailable) {
+            shooterTargetRpm = 0.0;
+            return;
+        }
+        double ticksPerRev = getShooterTicksPerRev();
+        double maxTicksPerSecond = SHOOTER_MAX_RPM * ticksPerRev / 60.0;
+        double p = SHOOTER_P;
+        double i = SHOOTER_I;
+        double d = SHOOTER_D;
+        double f = SHOOTER_F == -1.0 ? 32767.0 / maxTicksPerSecond : SHOOTER_F;
+        if (!Double.isFinite(rpm) || rpm <= 0.0
+                || !Double.isFinite(ticksPerRev) || ticksPerRev <= 0.0
+                || !Double.isFinite(maxTicksPerSecond) || maxTicksPerSecond <= 0.0
+                || !isValidShooterGain(p) || !isValidShooterGain(i)
+                || !isValidShooterGain(d) || !isValidShooterGain(f)) {
+            shooterOff();
+            return;
+        }
+
+        if (shooter.getMode() != DcMotor.RunMode.RUN_USING_ENCODER) {
+            shooter.setPower(0);
+            shooter.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+        }
+        // 설정이 바뀔 때만 Hub에 계수를 전송한다.
+        if (p != appliedShooterP || i != appliedShooterI
+                || d != appliedShooterD || f != appliedShooterF) {
+            shooter.setVelocityPIDFCoefficients(p, i, d, f);
+            appliedShooterP = p;
+            appliedShooterI = i;
+            appliedShooterD = d;
+            appliedShooterF = f;
+        }
+        // Hub의 속도 명령 범위와 모터 최대 RPM을 모두 지킨다.
+        shooterTargetRpm = Math.min(rpm, Math.min(SHOOTER_MAX_RPM, 32767.0 * 60.0 / ticksPerRev));
+        shooter.setVelocity(shooterTargetRpm * ticksPerRev / 60.0);
+    }
+
+    private static boolean isValidShooterGain(double gain) {
+        return Double.isFinite(gain) && gain >= 0.0;
     }
 
     public void shooterOff() {
+        // FLOAT로 자연 감속: 0 RPM을 적극적으로 유지하려고 역토크를 걸지 않는다.
         setShooterPower(0);
     }
 
-    /** 지금 슈터에 들어가는 출력. 슈터가 없으면 0. (텔레메트리용) */
+    public double getShooterTicksPerRev() {
+        if (!shooterAvailable) {
+            return 0.0;
+        }
+        return SHOOTER_TICKS_PER_REV == 0.0
+                ? shooter.getMotorType().getTicksPerRev() : SHOOTER_TICKS_PER_REV;
+    }
+
+    public double getShooterTargetRpm() {
+        return shooterTargetRpm;
+    }
+
+    /** 엔코더로 측정한 모터 출력축 RPM. */
+    public double getShooterRpm() {
+        double ticksPerRev = getShooterTicksPerRev();
+        return shooterAvailable && Double.isFinite(ticksPerRev) && ticksPerRev > 0.0
+                ? shooter.getVelocity() * 60.0 / ticksPerRev : 0.0;
+    }
+
+    public boolean isShooterAtSpeed() {
+        return shooterAvailable && shooterTargetRpm > 0.0
+                && Double.isFinite(SHOOTER_RPM_TOLERANCE) && SHOOTER_RPM_TOLERANCE >= 0.0
+                && Math.abs(shooterTargetRpm - getShooterRpm()) <= SHOOTER_RPM_TOLERANCE;
+    }
+
+    /** SDK가 보고하는 power 값. 속도 제어 중 실제 PWM 출력으로 해석하지 말 것. */
     public double getShooterPower() {
         return shooterAvailable ? shooter.getPower() : 0.0;
     }
