@@ -69,12 +69,46 @@ public class BioBuzzMechanism {
     /** RUN_TO_POSITION 명령 직후 isBusy() 상태가 갱신될 때까지 기다리는 시간 */
     private static final double PIPE_TURN_STARTUP_GRACE_SECONDS = 0.15;
 
-    /** 모터 출력축 목표 RPM. 기존 3720 RPM의 40% (3720 × 0.40). */
-    public static double SHOOTER_TARGET_RPM = 1488.0;
-    /** 모터 출력축 최대 RPM. 외부 풀리/기어 뒤의 플라이휠 RPM과는 다를 수 있다. */
-    public static double SHOOTER_MAX_RPM = 6000.0;
-    /** 출력축 1회전당 엔코더 카운트. 0이면 Robot Configuration의 모터 사양 사용. */
-    public static double SHOOTER_TICKS_PER_REV = 0.0;
+    /**
+     * 목표 RPM. <b>최대한 빠르게</b> 쏘기 위한 값.
+     * <p>
+     * 모터 무부하 최대는 1150 RPM이지만 폐루프로 그 값을 유지할 수는 없다.
+     * SDK가 속도 명령의 상한을 <b>무부하 최대의 85%</b>로 잡기 때문이다
+     * ({@code MotorConfigurationType.getAchieveableMaxTicksPerSecond()}
+     *  = {@code ticksPerRev × maxRPM × 0.85 / 60}, fraction 기본값 0.85).
+     * <pre>
+     *   1150 × 0.85 = 977 RPM  ← 폐루프로 명령할 수 있는 실질 상한
+     * </pre>
+     * 그래서 975로 잡았다. 이보다 올려도 상한에 걸려 같은 속도가 나오고,
+     * PID가 도달 못 하는 목표를 쫓느라 적분이 쌓인다(= 포화).
+     * <p>
+     * 발사 거리가 모자라면 이 값을 줄이는 게 아니라 슈터 기구(압축량·각도)를 봐야 한다.
+     * 진짜 무부하 최대로 돌리고 싶으면 폐루프를 포기하고
+     * {@code setShooterPower(1.0)}(개방루프)을 쓰면 된다 — 아래 shooterOn 주석 참고.
+     */
+    public static double SHOOTER_TARGET_RPM = 975.0;
+
+    /**
+     * 모터 무부하 최대 RPM. <b>F(피드포워드) 계산에 쓰이므로 참값이어야 한다.</b>
+     * goBILDA 5203 5.2:1 = 1150 RPM.
+     */
+    public static double SHOOTER_MAX_RPM = 1150.0;
+
+    /**
+     * 출력축 1회전당 엔코더 카운트. 0이면 Robot Configuration의 모터 사양을 쓴다.
+     * <p>
+     * <b>지금은 0으로 두면 안 된다.</b> Robot Configuration에 슈터가
+     * "GoBILDA 5202/3/4 series"로 등록돼 있는데, SDK의 그 항목은
+     * <b>99.5:1 기어박스(2786 ticks/rev, 최대 60 RPM)</b> 하나로 고정돼 있다
+     * (SDK의 {@code GoBILDA5202Series} 애노테이션에서 확인).
+     * 실제 모터는 5.2:1이라 사양이 전혀 다르다.
+     * <p>
+     * 그래서 실제 값 145.1을 직접 넣는다. 이걸 안 하면 RPM 환산이 19배 틀려서
+     * 목표를 낮춰도 명령이 상한에 걸려 항상 전속으로 도는 증상이 생긴다.
+     * <p>
+     * Robot Configuration의 모터 종류를 5.2:1에 맞는 항목으로 고치면 0으로 되돌려도 된다.
+     */
+    public static double SHOOTER_TICKS_PER_REV = 145.1;
     /** REV Hub 속도 PIDF 초기값. 실제 슈터에서 튜닝 필요; 단위는 RPM이 아닌 ticks/s. */
     public static double SHOOTER_P = 10.0;
     public static double SHOOTER_I = 3.0;
@@ -205,6 +239,9 @@ public class BioBuzzMechanism {
         }
         if (shooter.getMode() != DcMotor.RunMode.RUN_WITHOUT_ENCODER) {
             shooter.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
+            // 런모드를 벗어나면 Hub에 보낸 속도 PIDF 계수가 유지된다고 볼 수 없다.
+            // 캐시를 비워서 다음 setShooterRpm()이 반드시 다시 보내게 한다.
+            invalidateShooterPidfCache();
         }
         if (!Double.isFinite(power)) {
             power = 0.0;
@@ -212,7 +249,35 @@ public class BioBuzzMechanism {
         shooter.setPower(Range.clip(power, -1.0, 1.0));
     }
 
-    /** Dashboard 목표 RPM으로 회전. TeleOp에서 매 루프 호출하면 설정 변경도 반영된다. */
+    /**
+     * "Hub에 이 계수를 이미 보냈다"는 기록을 지운다.
+     * <p>
+     * {@link #setShooterRpm(double)}은 계수가 바뀔 때만 전송해서 I2C 왕복을 아낀다.
+     * 그런데 런모드를 {@code RUN_WITHOUT_ENCODER}로 바꿨다 돌아오면
+     * Hub 쪽 계수가 남아 있다는 보장이 없다. 그 경우 캐시만 보고 전송을 건너뛰면
+     * <b>커스텀 PIDF가 조용히 사라지고 모터 기본값으로 돌아간다.</b>
+     * 그래서 런모드를 바꿀 때마다 이걸 호출한다.
+     * <p>
+     * NaN은 자기 자신과도 같지 않으므로({@code NaN != NaN}) 비교가 반드시 참이 되어
+     * 다음 호출에서 전송이 일어난다.
+     */
+    private void invalidateShooterPidfCache() {
+        appliedShooterP = Double.NaN;
+        appliedShooterI = Double.NaN;
+        appliedShooterD = Double.NaN;
+        appliedShooterF = Double.NaN;
+    }
+
+    /**
+     * Dashboard 목표 RPM으로 회전. TeleOp에서 매 루프 호출하면 설정 변경도 반영된다.
+     * <p>
+     * 폐루프(속도 유지)라서 부하가 걸려도 같은 속도를 내려고 보정한다 — 발사 일관성이 좋다.
+     * 반대로 <b>무부하 최대 속도는 못 낸다</b> ({@link #SHOOTER_TARGET_RPM} 주석 참고).
+     * <p>
+     * 일관성보다 최대 속도가 중요하면 이 메소드 본문을 {@code setShooterPower(1.0)}으로
+     * 바꾸면 개방루프 전속이 된다. 그때는 PIDF·목표 RPM·"속도 도달" 표시가 모두 무의미해지고,
+     * 배터리가 닳을수록 속도가 떨어진다.
+     */
     public void shooterOn() {
         setShooterRpm(SHOOTER_TARGET_RPM);
     }
@@ -244,8 +309,10 @@ public class BioBuzzMechanism {
         if (shooter.getMode() != DcMotor.RunMode.RUN_USING_ENCODER) {
             shooter.setPower(0);
             shooter.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+            // 런모드를 바꿨으니 Hub 쪽 계수를 신뢰할 수 없다 → 아래에서 반드시 재전송된다.
+            invalidateShooterPidfCache();
         }
-        // 설정이 바뀔 때만 Hub에 계수를 전송한다.
+        // 설정이 바뀔 때만 Hub에 계수를 전송한다 (런모드가 바뀌었으면 위에서 캐시를 비웠다).
         if (p != appliedShooterP || i != appliedShooterI
                 || d != appliedShooterD || f != appliedShooterF) {
             shooter.setVelocityPIDFCoefficients(p, i, d, f);
