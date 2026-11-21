@@ -50,7 +50,7 @@ public class BioBuzzMechanism {
     // ────────────────────────────────────────────────
 
     /** 인테이크가 공을 빨아들일 때 출력 (0~1). 음수를 주면 토해낸다. */
-    public static double INTAKE_POWER = 0.8;
+    public static double INTAKE_POWER = 1;
     /** 파이프가 공을 올릴 때 출력 (0~1) */
     public static double PIPE_POWER = 0.8;
 
@@ -69,8 +69,8 @@ public class BioBuzzMechanism {
     /** RUN_TO_POSITION 명령 직후 isBusy() 상태가 갱신될 때까지 기다리는 시간 */
     private static final double PIPE_TURN_STARTUP_GRACE_SECONDS = 0.15;
 
-    /** 모터 출력축 목표 RPM. 6000 RPM × 기존 출력 0.62로 잡은 초기 추정값. */
-    public static double SHOOTER_TARGET_RPM = 3720.0;
+    /** 모터 출력축 목표 RPM. 기존 3720 RPM의 40% (3720 × 0.40). */
+    public static double SHOOTER_TARGET_RPM = 1488.0;
     /** 모터 출력축 최대 RPM. 외부 풀리/기어 뒤의 플라이휠 RPM과는 다를 수 있다. */
     public static double SHOOTER_MAX_RPM = 6000.0;
     /** 출력축 1회전당 엔코더 카운트. 0이면 Robot Configuration의 모터 사양 사용. */

@@ -23,14 +23,9 @@ import org.firstinspires.ftc.teamcode.bioBuzz.pedro.PoseStorage;
  * 모터 이름/방향을 바꾸려면 {@link PedroConstants#drivetrainConfig} 한 곳만 고치면 된다.
  *
  * <pre>
- * ── gamepad1 ──
+ * ── User 1 / gamepad1 — 주행 ──
  *  좌스틱        이동 (앞뒤좌우)
  *  우스틱 ←→     제자리 회전
- *
- *  X            인테이크 (공 먹기)       누를 때마다 켜기/끄기
- *  Y            파이프 (공 올리기)       누르고 있는 동안 돈다
- *  RT           파이프 역방향            누르고 있는 동안 돈다 (Y와 함께 누르면 RT 우선)
- *  B            슈터 (공 발사)           누를 때마다 켜기/끄기
  *
  *  LT(왼 트리거)  당기고 있는 동안 정밀 저속
  *  LB           필드중심 ↔ 로봇중심 전환
@@ -40,7 +35,11 @@ import org.firstinspires.ftc.teamcode.bioBuzz.pedro.PoseStorage;
  *  dpad ↑←↓→    누르고 있는 동안 그 방향으로 로봇 방향 고정 (필드 기준 0/90/180/270°)
  *  back         지금 로봇이 보는 방향을 "정면"으로 재설정 (필드중심 기준)
  *
- *  A            안 씀 (비어 있음)
+ * ── User 2 / gamepad2 — 기구 ──
+ *  X            인테이크 (공 먹기)       누를 때마다 켜기/끄기
+ *  Y            파이프 (공 올리기)       누르고 있는 동안 돈다
+ *  RT           파이프 역방향            누르고 있는 동안 돈다 (Y와 함께 누르면 RT 우선)
+ *  B            슈터 (공 발사)           누를 때마다 켜기/끄기
  * </pre>
  * 기구 출력 세기는 {@link BioBuzzMechanism#INTAKE_POWER} /
  * {@link BioBuzzMechanism#PIPE_TURN_POWER}, 슈터 목표 속도는
@@ -82,7 +81,7 @@ public class BioBuzzDriving extends OpMode {
     public static double HEADING_LOCK_D = 0.1;
 
     /**
-     * B 버튼의 "놓으면 그 자리 버티기(HOLD)" 기능을 쓸 수 있게 할지.
+     * User 1 RB 버튼의 "놓으면 그 자리 버티기(HOLD)" 기능을 쓸 수 있게 할지.
      * <p>
      * <b>기본 false — 튜닝이 끝나기 전에는 켜면 안 된다.</b>
      * HOLD는 Pedro의 {@code follower.hold()}를 쓰는 폐루프 위치 제어라서
@@ -134,6 +133,7 @@ public class BioBuzzDriving extends OpMode {
                 telemetry, FtcDashboard.getInstance().getTelemetry());
 
         telemetry.addLine("BioBuzz Driving (Pedro) 준비 완료");
+        telemetry.addLine("User 1: 주행 / User 2: X 인테이크, Y/RT 파이프, B 슈터");
         telemetry.addData("자율 위치 이어받기", PoseStorage.lastPose != null ? "예" : "아니오 — (0,0,0)에서 시작");
         telemetry.update();
     }
@@ -201,12 +201,12 @@ public class BioBuzzDriving extends OpMode {
             follower.manual(powers);
         }
 
-        // ⑥ 기구 모터 — 각 버튼의 토글/누름 상태를 매 루프 출력에 반영한다.
+        // ⑥ User 2 기구 모터 — 각 버튼의 토글/누름 상태를 매 루프 출력에 반영한다.
         // 인테이크 (X) — 누를 때마다 ON/OFF
-        if (gamepad1.x && !lastX) {
+        if (gamepad2.x && !lastX) {
             intakeToggle = !intakeToggle;
         }
-        lastX = gamepad1.x;
+        lastX = gamepad2.x;
 
         if (intakeToggle) {
             mechanism.intakeIn();
@@ -217,9 +217,9 @@ public class BioBuzzDriving extends OpMode {
 
         // 파이프 (Y/RT) — 누르는 동안만 돈다. 둘을 함께 누르면 RT 역방향이 우선한다.
         double pipePower = Math.abs(BioBuzzMechanism.PIPE_TURN_POWER);
-        if (gamepad1.right_trigger > TRIGGER_THRESHOLD) {
+        if (gamepad2.right_trigger > TRIGGER_THRESHOLD) {
             mechanism.setPipePower(Math.abs(PIPE_REVERSE_POWER));
-        } else if (gamepad1.y) {
+        } else if (gamepad2.y) {
             mechanism.setPipePower(-pipePower);
         } else {
             mechanism.setPipePower(0);
@@ -227,10 +227,10 @@ public class BioBuzzDriving extends OpMode {
 
         // 슈터 (B) — 누를 때마다 목표 RPM 유지 ON/OFF.
         // 슈터가 설정에 없으면 mechanism 쪽에서 알아서 무시한다.
-        if (gamepad1.b && !lastB) {
+        if (gamepad2.b && !lastB) {
             shooterToggle = !shooterToggle;
         }
-        lastB = gamepad1.b;
+        lastB = gamepad2.b;
         if (shooterToggle) {
             mechanism.shooterOn();
         } else {
@@ -263,20 +263,20 @@ public class BioBuzzDriving extends OpMode {
     private void showData(double speed) {
         Pose pose = follower.pose();
 
-        multipleTelemetry.addData("주행 모드(LB)", fieldCentric ? "필드중심" : "로봇중심");
-        multipleTelemetry.addData("놓으면 버티기(RB)",
+        multipleTelemetry.addData("주행 모드(User 1 LB)", fieldCentric ? "필드중심" : "로봇중심");
+        multipleTelemetry.addData("놓으면 버티기(User 1 RB)",
                 !HOLD_ENABLED ? "잠김 — 튜닝 전 (HOLD_ENABLED=false)"
                               : (holdWhenReleased ? "ON" : "OFF"));
         multipleTelemetry.addData("속도 배율", "%.2f", speed);
         multipleTelemetry.addData("Follower 상태", follower.mode());
         multipleTelemetry.addLine();
-        multipleTelemetry.addData("인테이크(X)", "%s  (%.2f)",
+        multipleTelemetry.addData("인테이크(User 2 X)", "%s  (%.2f)",
                 intakeToggle ? "ON" : "OFF", mechanism.intake.getPower());
-        multipleTelemetry.addData("파이프(Y/RT)", "%.2f", mechanism.pipe.getPower());
+        multipleTelemetry.addData("파이프(User 2 Y/RT)", "%.2f", mechanism.pipe.getPower());
         multipleTelemetry.addData("파이프 현재 엔코더",
                 mechanism.pipe.getCurrentPosition());
         multipleTelemetry.addData("파이프 모드", mechanism.pipe.getMode());
-        multipleTelemetry.addData("슈터(B)", mechanism.shooterAvailable
+        multipleTelemetry.addData("슈터(User 2 B)", mechanism.shooterAvailable
                 ? (shooterToggle ? "ON — RPM 제어" : "OFF")
                 : "모터 없음 — 설정에 " + BioBuzzMechanism.NAME_SHOOTER + " 추가 필요");
         if (mechanism.shooterAvailable) {
