@@ -70,45 +70,43 @@ public class BioBuzzMechanism {
     private static final double PIPE_TURN_STARTUP_GRACE_SECONDS = 0.15;
 
     /**
-     * 목표 RPM. <b>최대한 빠르게</b> 쏘기 위한 값.
+     * 목표 RPM. 기구를 1:1 (6000 RPM) 모터로 바꾼 뒤의 값.
      * <p>
-     * 모터 무부하 최대는 1150 RPM이지만 폐루프로 그 값을 유지할 수는 없다.
-     * SDK가 속도 명령의 상한을 <b>무부하 최대의 85%</b>로 잡기 때문이다
-     * ({@code MotorConfigurationType.getAchieveableMaxTicksPerSecond()}
-     *  = {@code ticksPerRev × maxRPM × 0.85 / 60}, fraction 기본값 0.85).
+     * 무부하 최대 6000의 50%다. 폐루프 속도 제어는 무부하 최대를 그대로 쓸 수 없고
+     * (SDK 상한이 무부하 최대의 85%, 그리고 부하가 걸리면 그보다 더 못 낸다),
+     * 3000이면 여유가 넉넉해서 공을 연속으로 넣어도 속도를 회복한다.
      * <pre>
-     *   1150 × 0.85 = 977 RPM  ← 폐루프로 명령할 수 있는 실질 상한
+     *   3000 RPM × 28 ticks/rev ÷ 60 = 1400 ticks/s   ← 실제 명령값
+     *   설정 기준 SDK 상한                = 2368 ticks/s  (= 5074 RPM)
      * </pre>
-     * 그래서 975로 잡았다. 이보다 올려도 상한에 걸려 같은 속도가 나오고,
-     * PID가 도달 못 하는 목표를 쫓느라 적분이 쌓인다(= 포화).
-     * <p>
-     * 발사 거리가 모자라면 이 값을 줄이는 게 아니라 슈터 기구(압축량·각도)를 봐야 한다.
-     * 진짜 무부하 최대로 돌리고 싶으면 폐루프를 포기하고
-     * {@code setShooterPower(1.0)}(개방루프)을 쓰면 된다 — 아래 shooterOn 주석 참고.
+     * 즉 5074 RPM까지는 올려도 상한에 안 걸린다. 발사가 약하면 이 값을 올리되,
+     * <b>텔레메트리의 "슈터 실제 RPM"이 목표를 따라오는지 확인하면서</b> 올릴 것.
+     * 따라오지 못하면 그게 그 기구의 한계다.
      */
-    public static double SHOOTER_TARGET_RPM = 975.0;
+    public static double SHOOTER_TARGET_RPM = 3000.0;
 
     /**
      * 모터 무부하 최대 RPM. <b>F(피드포워드) 계산에 쓰이므로 참값이어야 한다.</b>
-     * goBILDA 5203 5.2:1 = 1150 RPM.
+     * goBILDA 5203 1:1 (기어박스 없음) = 6000 RPM.
      */
-    public static double SHOOTER_MAX_RPM = 1150.0;
+    public static double SHOOTER_MAX_RPM = 6000.0;
 
     /**
      * 출력축 1회전당 엔코더 카운트. 0이면 Robot Configuration의 모터 사양을 쓴다.
      * <p>
-     * <b>지금은 0으로 두면 안 된다.</b> Robot Configuration에 슈터가
-     * "GoBILDA 5202/3/4 series"로 등록돼 있는데, SDK의 그 항목은
-     * <b>99.5:1 기어박스(2786 ticks/rev, 최대 60 RPM)</b> 하나로 고정돼 있다
-     * (SDK의 {@code GoBILDA5202Series} 애노테이션에서 확인).
-     * 실제 모터는 5.2:1이라 사양이 전혀 다르다.
+     * <b>0으로 두면 안 된다.</b> SDK의 모터 목록에는
+     * <b>28 ticks/rev · 6000 RPM 항목이 아예 없다</b> (직접 확인:
+     * GoBILDA5201Series=1500/104, GoBILDA5202Series=2786/60, NeveRest3.7=44.4/1784,
+     * REV 20HdHex=560/300, 40HdHex=1120/150 …). 즉 1:1 모터는 설정에서 고를 수가 없다.
      * <p>
-     * 그래서 실제 값 145.1을 직접 넣는다. 이걸 안 하면 RPM 환산이 19배 틀려서
-     * 목표를 낮춰도 명령이 상한에 걸려 항상 전속으로 도는 증상이 생긴다.
+     * 지금 설정은 "GoBILDA 5202/3/4 series"(2786 ticks/rev, 60 RPM = 99.5:1)로 돼 있다.
+     * 그 값을 그대로 쓰면 RPM 환산이 100배 틀어진다. 그래서 실제 값 28을 직접 넣는다.
      * <p>
-     * Robot Configuration의 모터 종류를 5.2:1에 맞는 항목으로 고치면 0으로 되돌려도 된다.
+     * 참고: 설정의 모터 종류는 <b>SDK 속도 상한 계산에만</b> 영향을 준다
+     * ({@code ticksPerRev × maxRPM × 0.85 / 60} = 2368 ticks/s). 이 상한은
+     * 기어비와 무관하게 거의 같아서(엔코더가 기어박스 앞에 있으므로) 문제가 되지 않는다.
      */
-    public static double SHOOTER_TICKS_PER_REV = 145.1;
+    public static double SHOOTER_TICKS_PER_REV = 28.0;
     /** REV Hub 속도 PIDF 초기값. 실제 슈터에서 튜닝 필요; 단위는 RPM이 아닌 ticks/s. */
     public static double SHOOTER_P = 10.0;
     public static double SHOOTER_I = 3.0;
